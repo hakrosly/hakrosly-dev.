@@ -14,6 +14,9 @@ FONT_CANDIDATES = [
     "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
 ]
 
+TABLE1_TITLE = "（別表）"
+TABLE2_TITLE = "（構成表）"
+
 # 表 2 の中身 (1 行目の「売上」は 2 列分の結合セル、「備考」は 2 行分の結合セル)
 TABLE2_HEADER = ["支店", "売上", "", "備考"]
 TABLE2_SUB = ["", "4月", "5月", ""]
@@ -64,7 +67,9 @@ def make_sample(path: str, rotate: float = 0.6, noise: float = 0.002, seed: int 
     page = Image.new("L", (1800, 2000), 255)
     draw = ImageDraw.Draw(page)
     draw.text((150, 100), "月次報告書 (サンプル)", fill=0, font=title_font)
-    draw.text((150, 190), "下の表は動作確認用のダミーです。", fill=0, font=font)
+    # 本文中の「構成表」は表題ではないので、選ばれてはいけない
+    draw.text((150, 170), "下の構成表は動作確認用のダミーです。", fill=0, font=font)
+    draw.text((150, 245), TABLE1_TITLE, fill=0, font=font)
 
     # 表 1: 単純な 3x3 の表
     col_w, row_h = [150, 400, 200], 80
@@ -76,7 +81,9 @@ def make_sample(path: str, rotate: float = 0.6, noise: float = 0.002, seed: int 
             _text(draw, font, x, y0 + r * row_h, col_w[c], row_h, value)
             x += col_w[c]
 
-    draw.text((150, 650), "支店別売上 (単位: 千円)", fill=0, font=font)
+    # 表題は欄外左上。右上の「単位」は表題ではない
+    draw.text((150, 660), TABLE2_TITLE, fill=0, font=font)
+    draw.text((1200, 660), "単位: 千円", fill=0, font=font)
 
     # 表 2: 結合セルを含む表
     col_w, row_h = [300, 280, 280, 400], 90

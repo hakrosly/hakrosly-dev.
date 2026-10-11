@@ -2,8 +2,8 @@
 
 例:
     python -m tableocr scan.tif --list --debug-dir debug
-    python -m tableocr scan.tif --page 1 --table 2 -o result.xlsx
-    python -m tableocr scan.tif --keyword 請求明細 --clipboard
+    python -m tableocr scan.tif --clipboard            # 表題「（構成表）」の表を読む
+    python -m tableocr scan.tif --table 2 -o result.xlsx
 """
 
 from __future__ import annotations
@@ -19,7 +19,8 @@ import pytesseract
 from . import __version__
 from .export import copy_to_clipboard, to_delimited, write_output
 from .image_io import load_pages
-from .ocr import OcrOptions, configure_tesseract, ocr_region_text, ocr_table
+from .ocr import OcrOptions, configure_tesseract, ocr_region_text, ocr_table, read_title, title_matches
+from .offline import block_network
 from .table_detect import deskew, detect_tables, draw_tables
 
 
@@ -41,8 +42,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("input", help="TIFF ファイル (マルチページ可)")
     p.add_argument("--list", action="store_true", help="見つかった表の一覧を表示して終了する")
     p.add_argument("--page", type=int, help="対象のページ番号 (1 始まり)。省略時は全ページ")
-    p.add_argument("--table", type=int, default=1, help="対象の表の番号 (--list で表示される番号)。既定は 1")
-    p.add_argument("--keyword", help="この文字を含む表を選ぶ (--table より優先)")
+    p.add_argument(
+        "--title",
+        default=DEFAULT_TITLE,
+        help=f"欄外左上の表題がこの文字を含む表を選ぶ (既定: {DEFAULT_TITLE})。--table/--keyword 指定時は使わない",
+    )
+    p.add_argument("--table", type=int, help="表を番号で選ぶ (--list で表示される番号)")
+    p.add_argument("--keyword", help="表の中か表のすぐ上にこの文字がある表を選ぶ")
     p.add_argument("--roi", type=_parse_roi, help="探す範囲を x,y,幅,高さ (ピクセル) で限定する")
     p.add_argument("-o", "--output", help="出力先 (.tsv / .csv / .xlsx)。省略時は画面に TSV を表示")
     p.add_argument("--clipboard", action="store_true", help="結果をクリップボードに入れる (Excel で Ctrl+V)")
@@ -57,11 +63,16 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+DEFAULT_TITLE = "構成表"
+
+
 def _log(msg: str) -> None:
     print(msg, file=sys.stderr)
 
 
 def main(argv: list[str] | None = None) -> int:
+    # 外部通信は一切しない。念のためプロセス内の通信を封じてから動かす
+    block_network()
     args = build_parser().parse_args(argv)
     try:
         return _run(args)
@@ -115,11 +126,21 @@ def _run(args: argparse.Namespace) -> int:
         return 1
 
     if args.list:
-        for i, (page, _, _, t) in enumerate(found, start=1):
-            print(f"#{i}  ページ {page.index}  位置 x={t.x} y={t.y} 幅={t.w} 高さ={t.h}  {t.n_rows} 行 x {t.n_cols} 列")
+        for i, (page, gray, masks, t) in enumerate(found, start=1):
+            title = read_title(gray, masks, t, page.dpi, options)
+            mark = "  ← 対象" if title_matches(title, args.title) else ""
+            print(
+                f"#{i}  ページ {page.index}  位置 x={t.x} y={t.y} 幅={t.w} 高さ={t.h}  "
+                f"{t.n_rows} 行 x {t.n_cols} 列  表題: {title or '(なし)'}{mark}"
+            )
         return 0
 
-    if args.keyword:
+    if args.table is not None:
+        chosen = args.table
+        if not 1 <= chosen <= len(found):
+            _log(f"表 #{chosen} はありません (見つかった表は {len(found)} 個)")
+            return 2
+    elif args.keyword:
         target = args.keyword.replace(" ", "")
         chosen = None
         for i, (page, gray, masks, t) in enumerate(found, start=1):
@@ -130,10 +151,19 @@ def _run(args: argparse.Namespace) -> int:
             _log(f"「{args.keyword}」を含む表が見つかりませんでした")
             return 1
     else:
-        chosen = args.table
-        if not 1 <= chosen <= len(found):
-            _log(f"表 #{chosen} はありません (見つかった表は {len(found)} 個)")
-            return 2
+        matches = []
+        for i, (page, gray, masks, t) in enumerate(found, start=1):
+            title = read_title(gray, masks, t, page.dpi, options)
+            if title_matches(title, args.title):
+                matches.append((i, title))
+        if not matches:
+            _log(f"表題に「{args.title}」がある表が見つかりませんでした。--list で各表の表題を確認してください。")
+            return 1
+        chosen, title = matches[0]
+        _log(f"表題「{title}」の表を選びました")
+        if len(matches) > 1:
+            others = ", ".join(f"#{i}" for i, _ in matches[1:])
+            _log(f"注意: 同じ表題の表が他にもあります ({others})。別の表は --table か --page で選んでください。")
 
     page, gray, masks, table = found[chosen - 1]
     _log(f"表 #{chosen} (ページ {page.index}, {table.n_rows} 行 x {table.n_cols} 列) を読み取ります")
