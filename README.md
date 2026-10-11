@@ -10,6 +10,11 @@
 
 状態の種類: 構想中 / 仕様確定待ち / 仕様確定 / 社内で開発中 / 完了 / 中止
 
+## メモ帳
+
+構想書にするほど固まっていない、仕事で使えそうなアイデア・ツール・知見は [notes/memo.md](notes/memo.md) にまとめています。
+育ったものは構想書 (`projects/`) へ移します。
+
 ## Copilot への渡し方
 
 - **構想書のファイル 1 つ (`spec.md`) だけ** を渡す。フォルダや、このリポジトリ全体は渡さない。
@@ -23,6 +28,7 @@
 README.md                  この一覧
 common/constraints.md      全構想に共通の決まり (各構想書の 2 章へ書き写す元)
 templates/spec_template.md 構想書のひな形
+notes/memo.md              アイデア・ツール・知見のメモ帳 (増えたら分割)
 projects/
   001-tiff-table-ocr/
     README.md              概要・状態・経緯
