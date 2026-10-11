@@ -5,3 +5,9 @@ __pycache__/
 venv/
 output/
 debug/
+# 社内データ (図面・書類) や出力結果を入れないため
+*.tif
+*.tiff
+*.xlsx
+*.csv
+*.tsv
