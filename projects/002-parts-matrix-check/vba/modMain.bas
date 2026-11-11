@@ -67,7 +67,7 @@ End Sub
 ' マトリックスの形を、マウスで教えてもらう。できた設定を返す。やめたら Nothing
 Private Function TeachLayout(ByVal wb As Workbook, ByVal layName As String) As Object
     Dim r1 As Range, r2 As Range, r3 As Range, ws As Worksheet
-    Dim orient As String, kind As String, nameAddr As String, lay As Object, msg As String
+    Dim orient As String, kind As String, nameAddr As String, lay As Object, msg As String, multi As Boolean
     Set TeachLayout = Nothing
     wb.Activate
     Set r1 = AskRange("① 品番が並んでいるセルを、マウスで選んでください。" & vbLf & "(見出しは含めないでください)")
@@ -76,6 +76,15 @@ Private Function TeachLayout(ByVal wb As Workbook, ByVal layName As String) As O
     Set r2 = AskRange("② 部品名称が並んでいるセルを、マウスで選んでください。" & vbLf & "(品番と同じ長さで。名称を比べないときは「キャンセル」)")
     Set r3 = AskRange("③ 仕様の見出しのセルを、マウスで選んでください。" & vbLf & "(何段あっても全部。品番や名称の見出しは含めないでください)")
     If r3 Is Nothing Then Exit Function
+    multi = (r1.Areas.Count > 1 Or r3.Areas.Count > 1)
+    If Not r2 Is Nothing Then
+        If r2.Areas.Count > 1 Then multi = True
+    End If
+    If multi Then
+        MsgBox "範囲は、ひと続きの四角で選んでください (Ctrl キーを押しながらの、飛び飛びの選び方はできません)。" & vbLf & vbLf & _
+            "設定は保存していません。もう一度やり直してください。", vbExclamation, APP_TITLE
+        Exit Function
+    End If
     If r1.Rows.Count > r1.Columns.Count Then
         orient = O_VERT
     ElseIf r1.Rows.Count < r1.Columns.Count Then

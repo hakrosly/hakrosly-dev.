@@ -14,3 +14,5 @@ debug/
 
 # 002 の開発用の作業フォルダ
 projects/002-parts-matrix-check/devtools/work/
+# 002 の持ち込み用のブック (作り物のデータだけ。本物のデータは入れない)
+!projects/002-parts-matrix-check/handover/*.xlsx

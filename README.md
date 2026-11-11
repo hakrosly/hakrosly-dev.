@@ -7,7 +7,7 @@
 | 番号 | 名前 | 状態 | 構想書 (Copilot に渡す URL) | 試作 |
 |---|---|---|---|---|
 | 001 | TIFF 図面の構成表読み取りツール | 仕様確定待ち (残課題あり) | [spec.md](projects/001-tiff-table-ocr/spec.md) / [raw](https://raw.githubusercontent.com/hakrosly/hakrosly-dev./ccr-77995653-gzbrvc/projects/001-tiff-table-ocr/spec.md) | あり (古い版) |
-| 002 | 部品表と品番マトリックスの照合ツール | 構想中 | [spec.md](projects/002-parts-matrix-check/spec.md) / [raw](https://raw.githubusercontent.com/hakrosly/hakrosly-dev./ccr-77995653-gzbrvc/projects/002-parts-matrix-check/spec.md) | なし |
+| 002 | 部品表と品番マトリックスの照合ツール | 構想中 (土台のコードあり。Excel では未確認) | [spec.md](projects/002-parts-matrix-check/spec.md) / [raw](https://raw.githubusercontent.com/hakrosly/hakrosly-dev./ccr-77995653-gzbrvc/projects/002-parts-matrix-check/spec.md) | [土台のコードと持ち込み用のブック](projects/002-parts-matrix-check/README.md) |
 
 状態の種類: 構想中 / 仕様確定待ち / 仕様確定 / 社内で開発中 / 完了 / 中止
 
@@ -22,6 +22,7 @@
 - URL は、上の表の **raw** の方 (文字だけのページ) を貼る。普通の GitHub の画面よりも余計な表示が無く、読み取りやすい。
 - 構想書は 1 ファイルで完結するように書く (共通の決まりも中に書き写す)。他のファイルを読まなくても分かるようにするため。
 - Copilot が URL を開けない場合は、`spec.md` をダウンロードして添付するか、中身を貼り付ける。
+- 土台のコードがある構想 (002) は、構想書に加えて、直したいモジュール 1 本も渡す。渡し方はその構想の README に書く。
 
 ## フォルダの構成
 
@@ -38,6 +39,10 @@ projects/
     prototype/             試作 (ある場合だけ)
   002-parts-matrix-check/
     README.md / spec.md / decisions.md
+    handover/              持ち込み用の Excel ブックと、結果の見本
+    vba/                   VBA のコード (読む用)
+    vba_import/            VBA のコード (VBA の画面に取り込む用)
+    devtools/              作る側の確かめ用の道具
 ```
 
 ## 新しい構想の追加手順
@@ -50,6 +55,6 @@ projects/
 
 ## 決まりごと
 
-- 本物の図面・書類などの社内データは入れない。テストには自分で作った画像を使う。
+- 本物の図面・書類などの社内データは入れない。テストには自分で作った画像やデータを使う。
 - 試作は `prototype/` に入れ、構想ごとに必要な部品の一覧 (`requirements.txt`) を持たせる。
 - 試作と構想書が食い違うときは、構想書を正とする。試作の README の先頭にもそう書く。

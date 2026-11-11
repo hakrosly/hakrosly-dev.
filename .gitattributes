@@ -1,0 +1,2 @@
+# VBA の画面に取り込むためのファイル (Shift-JIS、改行 CRLF)。改行や文字を変えない
+projects/002-parts-matrix-check/vba_import/*.bas -text

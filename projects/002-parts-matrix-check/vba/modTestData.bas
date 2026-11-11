@@ -78,7 +78,7 @@ End Function
 '   kind = "M5" : 印の代わりに員数。AB123-0030 の S4 だけ 1 (部品表は 2) → N-6
 '   それ以外    : 印。上に書いた食い違いが入っている
 Public Function TestRows(ByVal kind As String) As Variant
-    Dim a(1 To 5, 1 To 6) As Variant, m As String, two As String
+    Dim a(1 To 5, 1 To 6) As Variant, m As String
     m = Maru()
     If kind = "OK" Then
         SetRow a, 1, "ブラケットA", "AB123-0010", m, m, "", ""
@@ -118,6 +118,16 @@ Private Sub PutText(ByVal ws As Worksheet, ByVal r As Long, ByVal c As Long, ByV
     ws.Cells(r, c).Value = s
 End Sub
 
+' テスト用の表に、罫線と列の幅を付ける (見た目だけ。失敗しても中身には関係ない)
+Private Sub Dress(ByVal ws As Worksheet, ByVal addr As String)
+    On Error Resume Next
+    ws.Range(addr).Borders.LineStyle = 1
+    ws.Columns(1).ColumnWidth = 16
+    ws.Columns(2).ColumnWidth = 24
+    Err.Clear
+    On Error GoTo 0
+End Sub
+
 ' ---- マトリックスを 1 枚のシートに作る ----
 '   M1 : 品番が縦。見出しは 2 段で、上の段 (STD / DX) は 2 列ずつ結合。上に題名の行が 2 行
 '   M2 : M1 の縦と横を入れ替えた形 (品番が横)
@@ -149,6 +159,7 @@ Public Sub FillTestMatrix(ByVal ws As Worksheet, ByVal kind As String)
         PutText ws, 6, 2, "4WD"
         PutText ws, 7, 2, "2WD"
         PutText ws, 8, 2, "4WD"
+        Dress ws, "A3:G8"
         Exit Sub
     End If
     ' 品番が縦
@@ -193,6 +204,7 @@ Public Sub FillTestMatrix(ByVal ws As Worksheet, ByVal kind As String)
         ws.Range("G3:G4").Merge
         PutText ws, 3, 7, "備考"
         PutText ws, 7, 7, "要確認"
+        Dress ws, "A3:G11"
     Else
         For i = 1 To 5
             PutText ws, 4 + i, 1, CStr(d(i, 1))
@@ -201,6 +213,7 @@ Public Sub FillTestMatrix(ByVal ws As Worksheet, ByVal kind As String)
                 PutText ws, 4 + i, 2 + j, CStr(d(i, 2 + j))
             Next j
         Next i
+        Dress ws, "A3:F9"
     End If
 End Sub
 
