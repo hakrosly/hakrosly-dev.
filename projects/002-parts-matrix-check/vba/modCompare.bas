@@ -11,45 +11,28 @@ Option Explicit
 '     3. 検算のための数
 ' ============================================================
 
-Public Type TResult
-    Findings As Variant      ' 食い違いの一覧 (行, FC_N)。無ければ Empty
-    NFind As Long            ' 一覧の行数
-    NNg As Long              ' 不一致の件数
-    NWarn As Long            ' 警告の件数
-    Signature As String      ' 不一致の内容をつないだ文字 (結果が変わったかを見るのに使う)
-    BomStatus As Variant     ' 部品表の行ごとの状態 (1 To 行数)
-    BomNote As Variant       ' その説明
-    CellStatus As Variant    ' マトリックスのセルごとの状態 (1 To 行数)
-    CellNote As Variant      ' その説明
-    PartNg As String         ' 部品表に無い品番 (N-2) の品番キー。タブで囲んで並べる
-    PartWarn As String       ' 警告のある品番 (W-10) の品番キー
-    NameNg As String         ' 名称が違う品番 (N-3) の品番キー
-    ' ---- 検算のための数 ----
-    MCells As Long           ' マトリックスのセルの数
-    MOk As Long
-    MNg As Long
-    MUnk As Long
-    MOut As Long
-    BRows As Long            ' 部品表の行の数 (品番 × 仕様)
-    BOk As Long
-    BNg As Long
-    BUnk As Long
-    BOut As Long
-    BPairsT As Long          ' 部品表の「品番 × 仕様」の組 (対象の仕様で、品番がマトリックスにあるもの。重なりは除く)
-    BPairsOk As Long         ' そのうち、マトリックスも「あり」だった組 (部品表の側から数えた)
-    BPairsUnk As Long        ' そのうち、マトリックスが「判断できない」だった組
-    MPairsYes As Long        ' マトリックスの「あり」の組 (品番が部品表にあるもの。重なりは除く)
-    MPairsOk As Long         ' そのうち、部品表にもあった組 (マトリックスの側から数えた)
-    FN4 As Long              ' 一覧に出した N-4 の件数
-    FN5 As Long              ' 一覧に出した N-5 の件数
-    ' ---- まとめに書くこと ----
-    SpecsT As String         ' 対象の仕様 (改行区切り)
-    SpecsOutside As String   ' 比べなかった部品表の仕様 (改行区切り)
-    HeadsExcluded As String  ' 対象外にした見出し (改行区切り)
-    SkippedN1 As Boolean     ' N-1 を調べなかった
-    SkippedN3 As Boolean
-    SkippedN6 As Boolean
-End Type
+' ---- 結果の返し方 ----
+'   一覧は 3 つの引数で返す。
+'     findings  : 食い違いの一覧 (行, FC_N)。無ければ Empty
+'     bomCheck  : 部品表の行ごとの消し込み (行, 2)。1 = 状態、2 = 説明
+'     cellCheck : マトリックスのセルごとの消し込み (行, 2)。1 = 状態、2 = 説明
+'   数や文字は辞書 (res) で返す。名前と中身は次のとおり。
+'   NFind / NNg / NWarn : 一覧の行数 / 不一致の件数 / 警告の件数
+'   Signature     : 不一致の内容をつないだ文字 (結果が変わったかを見るのに使う)
+'   PartNg / PartWarn / NameNg : 部品表に無い品番 (N-2) / 警告のある品番 (W-10) / 名称が違う品番 (N-3)。
+'                                品番キーをタブで囲んで並べた文字
+'   検算のための数:
+'   MCells, MOk, MNg, MUnk, MOut : マトリックスのセルの数と、状態ごとの数
+'   BRows, BOk, BNg, BUnk, BOut  : 部品表の行の数 (品番 × 仕様) と、状態ごとの数
+'   BPairsT   : 部品表の「品番 × 仕様」の組 (対象の仕様で、品番がマトリックスにあるもの。重なりは除く)
+'   BPairsOk  : そのうち、マトリックスも「あり」だった組 (部品表の側から数えた)
+'   BPairsUnk : そのうち、マトリックスが「判断できない」だった組
+'   MPairsYes : マトリックスの「あり」の組 (品番が部品表にあるもの。重なりは除く)
+'   MPairsOk  : そのうち、部品表にもあった組 (マトリックスの側から数えた)
+'   FN4 / FN5 : 一覧に出した N-4 / N-5 の件数
+'   まとめに書くこと:
+'   SpecsT / SpecsOutside / HeadsExcluded : 対象の仕様 / 比べなかった部品表の仕様 / 対象外にした見出し (改行区切り)
+'   SkippedN1 / SkippedN3 / SkippedN6     : その項目を調べなかったら True
 
 Private mF() As Variant      ' 一覧をためる入れ物 (列, 行)
 Private mFOrd() As Long      ' 並べる順番
@@ -155,10 +138,12 @@ End Function
 '   hasFilter : 部品表の絞り込みが設定されているか (されていなければ N-1 を調べない)
 '   cmpName   : 名称を比べるか
 '   cmpQty    : 員数を比べるか
-'   res       : 結果を入れて返す
+'   res       : 数や文字の結果を入れて返す辞書
+'   findings / bomCheck / cellCheck : 一覧の結果 (上の説明のとおり)
 ' ============================================================
 Public Sub CompareCore(ByRef bom As Variant, ByRef mtx As Variant, ByRef map As Variant, ByRef warn As Variant, _
-        ByVal hasFilter As Boolean, ByVal cmpName As Boolean, ByVal cmpQty As Boolean, ByRef res As TResult)
+        ByVal hasFilter As Boolean, ByVal cmpName As Boolean, ByVal cmpQty As Boolean, ByVal res As Object, _
+        ByRef findings As Variant, ByRef bomCheck As Variant, ByRef cellCheck As Variant)
     Dim nB As Long, nM As Long, nP As Long, nW As Long
     Dim i As Long, j As Long, k As Long, ord As Long
     Dim headSpecs As Object, headExcl As Object, specText As Object, tSpec As Object
@@ -168,8 +153,12 @@ Public Sub CompareCore(ByRef bom As Variant, ByRef mtx As Variant, ByRef map As 
     Dim h As String, sk As String, key As String, pk As String, mv As String, st As String, note As String
     Dim specs As Variant, keys As Variant
     Dim bRow As Long, bq As String, mq As String, nameB As String
-    Dim bStat() As String, bNote() As String, cStat() As String, cNote() As String
+    Dim bChk() As Variant, cChk() As Variant
     Dim out() As Variant, sig As String, first As Boolean, t As String
+    Dim rsNFind As Long, rsNNg As Long, rsNWarn As Long, rsMCells As Long, rsMOk As Long, rsMNg As Long, rsMUnk As Long, rsMOut As Long, rsBRows As Long, rsBOk As Long
+    Dim rsBNg As Long, rsBUnk As Long, rsBOut As Long, rsBPairsT As Long, rsBPairsOk As Long, rsBPairsUnk As Long, rsMPairsYes As Long, rsMPairsOk As Long, rsFN4 As Long, rsFN5 As Long
+    Dim rsSignature As String, rsPartNg As String, rsPartWarn As String, rsNameNg As String, rsSpecsT As String, rsSpecsOutside As String, rsHeadsExcluded As String
+    Dim rsSkippedN1 As Boolean, rsSkippedN3 As Boolean, rsSkippedN6 As Boolean
 
     nB = RowCount(bom): nM = RowCount(mtx): nP = RowCount(map): nW = RowCount(warn)
     FReset
@@ -261,12 +250,11 @@ Public Sub CompareCore(ByRef bom As Variant, ByRef mtx As Variant, ByRef map As 
     Next i
 
     ' ---- 4. マトリックスのセルを 1 つずつ確かめる (マトリックス側の消し込み) ----
-    res.MCells = nM: res.MOk = 0: res.MNg = 0: res.MUnk = 0: res.MOut = 0
-    res.FN4 = 0: res.FN5 = 0
+    rsMCells = nM: rsMOk = 0: rsMNg = 0: rsMUnk = 0: rsMOut = 0
+    rsFN4 = 0: rsFN5 = 0
     Set done = NewDict()
     If nM > 0 Then
-        ReDim cStat(1 To nM)
-        ReDim cNote(1 To nM)
+        ReDim cChk(1 To nM, 1 To 2)
     End If
     For i = 1 To nM
         key = ToText(mtx(i, MC_KEY))
@@ -311,7 +299,7 @@ Public Sub CompareCore(ByRef bom As Variant, ByRef mtx As Variant, ByRef map As 
                             note = "部品表に登録が無い (N-5)"
                             If Not done.Exists("N-5" & vbTab & pk) Then
                                 done.Add "N-5" & vbTab & pk, True
-                                res.FN5 = res.FN5 + 1
+                                rsFN5 = rsFN5 + 1
                                 bRow = bomPart.Item(key)
                                 FAdd "N-5", ToText(mtx(i, MC_PART)), ToText(bom(bRow, BC_NAME)), ToText(mtx(i, MC_NAME)), _
                                     specText.Item(sk), h, V_NO, WithQty(V_YES, ToText(mtx(i, MC_QTY))), ToText(mtx(i, MC_VALCELL)), _
@@ -335,7 +323,7 @@ Public Sub CompareCore(ByRef bom As Variant, ByRef mtx As Variant, ByRef map As 
                             note = "マトリックスに印が無い (N-4)"
                             If Not done.Exists("N-4" & vbTab & pk) Then
                                 done.Add "N-4" & vbTab & pk, True
-                                res.FN4 = res.FN4 + 1
+                                rsFN4 = rsFN4 + 1
                                 bRow = bomPair.Item(pk)
                                 FAdd "N-4", ToText(mtx(i, MC_PART)), ToText(bom(bRow, BC_NAME)), ToText(mtx(i, MC_NAME)), _
                                     specText.Item(sk), h, WithQty(V_YES, ToText(bom(bRow, BC_QTY))), V_NO, ToText(mtx(i, MC_VALCELL)), _
@@ -346,23 +334,22 @@ Public Sub CompareCore(ByRef bom As Variant, ByRef mtx As Variant, ByRef map As 
                 End If
             Next k
         End If
-        cStat(i) = st
-        cNote(i) = note
+        cChk(i, 1) = st
+        cChk(i, 2) = note
         Select Case st
-            Case S_OK: res.MOk = res.MOk + 1
-            Case S_NG: res.MNg = res.MNg + 1
-            Case S_UNK: res.MUnk = res.MUnk + 1
-            Case Else: res.MOut = res.MOut + 1
+            Case S_OK: rsMOk = rsMOk + 1
+            Case S_NG: rsMNg = rsMNg + 1
+            Case S_UNK: rsMUnk = rsMUnk + 1
+            Case Else: rsMOut = rsMOut + 1
         End Select
     Next i
 
     ' ---- 5. 部品表の行を 1 つずつ確かめる (部品表側の消し込み) ----
-    res.BRows = nB: res.BOk = 0: res.BNg = 0: res.BUnk = 0: res.BOut = 0
-    res.BPairsT = 0: res.BPairsOk = 0: res.BPairsUnk = 0
+    rsBRows = nB: rsBOk = 0: rsBNg = 0: rsBUnk = 0: rsBOut = 0
+    rsBPairsT = 0: rsBPairsOk = 0: rsBPairsUnk = 0
     Set n1 = NewDict()            ' N-1 の品番キー → 使う仕様 (元の文字を並べたもの)
     If nB > 0 Then
-        ReDim bStat(1 To nB)
-        ReDim bNote(1 To nB)
+        ReDim bChk(1 To nB, 1 To 2)
     End If
     For j = 1 To nB
         key = ToText(bom(j, BC_KEY))
@@ -393,10 +380,10 @@ Public Sub CompareCore(ByRef bom As Variant, ByRef mtx As Variant, ByRef map As 
         Else
             pk = key & vbTab & sk
             first = (bomPair.Item(pk) = j)
-            If first Then res.BPairsT = res.BPairsT + 1
+            If first Then rsBPairsT = rsBPairsT + 1
             If pairYes.Exists(pk) Then
                 st = S_OK
-                If first Then res.BPairsOk = res.BPairsOk + 1
+                If first Then rsBPairsOk = rsBPairsOk + 1
                 bq = ToText(bom(j, BC_QTY))
                 mq = ToText(mtx(pairYes.Item(pk), MC_QTY))
                 If cmpQty And IsNumeric(bq) And IsNumeric(mq) Then
@@ -408,19 +395,19 @@ Public Sub CompareCore(ByRef bom As Variant, ByRef mtx As Variant, ByRef map As 
             ElseIf pairUnk.Exists(pk) Then
                 st = S_UNK
                 note = "マトリックスの値が判断できない"
-                If first Then res.BPairsUnk = res.BPairsUnk + 1
+                If first Then rsBPairsUnk = rsBPairsUnk + 1
             Else
                 st = S_NG
                 note = "マトリックスに印が無い (N-4)"
             End If
         End If
-        bStat(j) = st
-        bNote(j) = note
+        bChk(j, 1) = st
+        bChk(j, 2) = note
         Select Case st
-            Case S_OK: res.BOk = res.BOk + 1
-            Case S_NG: res.BNg = res.BNg + 1
-            Case S_UNK: res.BUnk = res.BUnk + 1
-            Case Else: res.BOut = res.BOut + 1
+            Case S_OK: rsBOk = rsBOk + 1
+            Case S_NG: rsBNg = rsBNg + 1
+            Case S_UNK: rsBUnk = rsBUnk + 1
+            Case Else: rsBOut = rsBOut + 1
         End Select
     Next j
 
@@ -436,27 +423,27 @@ Public Sub CompareCore(ByRef bom As Variant, ByRef mtx As Variant, ByRef map As 
         Next k
     End If
     ' N-2 / W-10 / N-3
-    res.PartNg = vbTab: res.PartWarn = vbTab: res.NameNg = vbTab
+    rsPartNg = vbTab: rsPartWarn = vbTab: rsNameNg = vbTab
     If mtxPart.Count > 0 Then
         keys = mtxPart.Keys
         For k = LBound(keys) To UBound(keys)
             key = keys(k)
             i = mtxPart.Item(key)
             If Not bomPart.Exists(key) Then
-                res.PartNg = res.PartNg & key & vbTab
+                rsPartNg = rsPartNg & key & vbTab
                 FAdd "N-2", ToText(mtx(i, MC_PART)), "", ToText(mtx(i, MC_NAME)), "", "", "品番が無い", "品番がある", ToText(mtx(i, MC_PARTCELL)), _
                     "マトリックスにある品番が、部品表に無い"
             Else
                 bRow = bomPart.Item(key)
                 nameB = ToText(bom(bRow, BC_NAME))
                 If hasFilter And Not bomIn.Exists(key) Then
-                    res.PartWarn = res.PartWarn & key & vbTab
+                    rsPartWarn = rsPartWarn & key & vbTab
                     FAdd "W-10", ToText(mtx(i, MC_PART)), nameB, ToText(mtx(i, MC_NAME)), "", "", "", "", ToText(mtx(i, MC_PARTCELL)), _
                         "マトリックスの品番が、部品表の絞り込みの外にある (絞り込みの値が合っているか確かめること)"
                 End If
                 If cmpName Then
                     If NormName(nameB) <> NormName(ToText(mtx(i, MC_NAME))) Then
-                        res.NameNg = res.NameNg & key & vbTab
+                        rsNameNg = rsNameNg & key & vbTab
                         FAdd "N-3", ToText(mtx(i, MC_PART)), nameB, ToText(mtx(i, MC_NAME)), "", "", nameB, ToText(mtx(i, MC_NAME)), ToText(mtx(i, MC_NAMECELL)), _
                             "名称が、部品表とマトリックスで違う"
                     End If
@@ -496,24 +483,24 @@ Public Sub CompareCore(ByRef bom As Variant, ByRef mtx As Variant, ByRef map As 
     Next i
 
     ' ---- 8. 検算のための数 (マトリックスの側から数え直す) ----
-    res.MPairsYes = 0: res.MPairsOk = 0
+    rsMPairsYes = 0: rsMPairsOk = 0
     If pairYes.Count > 0 Then
         keys = pairYes.Keys
         For k = LBound(keys) To UBound(keys)
             pk = keys(k)
             key = Left(pk, InStr(pk, vbTab) - 1)
             If bomPart.Exists(key) Then
-                res.MPairsYes = res.MPairsYes + 1
-                If bomPair.Exists(pk) Then res.MPairsOk = res.MPairsOk + 1
+                rsMPairsYes = rsMPairsYes + 1
+                If bomPair.Exists(pk) Then rsMPairsOk = rsMPairsOk + 1
             End If
         Next k
     End If
 
     ' ---- 9. 一覧を、区分 → 記号 → 表での並び順 に並べて返す ----
-    res.NFind = mFN: res.NNg = 0: res.NWarn = 0
+    rsNFind = mFN: rsNNg = 0: rsNWarn = 0
     sig = ""
     If mFN = 0 Then
-        res.Findings = Empty
+        findings = Empty
     Else
         ReDim out(1 To mFN, 1 To FC_N)
         k = 0
@@ -525,35 +512,31 @@ Public Sub CompareCore(ByRef bom As Variant, ByRef mtx As Variant, ByRef map As 
                         out(k, j) = mF(j, i)
                     Next j
                     If mF(FC_CLASS, i) = CLASS_NG Then
-                        res.NNg = res.NNg + 1
+                        rsNNg = rsNNg + 1
                         sig = sig & mF(FC_CODE, i) & "|" & NormPart(CStr(mF(FC_PART, i))) & "|" & mF(FC_SPEC, i) & "|" & mF(FC_CELL, i) & vbLf
                     Else
-                        res.NWarn = res.NWarn + 1
+                        rsNWarn = rsNWarn + 1
                     End If
                 End If
             Next i
         Next ord
-        res.Findings = out
+        findings = out
     End If
-    res.Signature = sig
+    rsSignature = sig
     If nB > 0 Then
-        res.BomStatus = bStat
-        res.BomNote = bNote
+        bomCheck = bChk
     Else
-        res.BomStatus = Empty
-        res.BomNote = Empty
+        bomCheck = Empty
     End If
     If nM > 0 Then
-        res.CellStatus = cStat
-        res.CellNote = cNote
+        cellCheck = cChk
     Else
-        res.CellStatus = Empty
-        res.CellNote = Empty
+        cellCheck = Empty
     End If
 
     ' ---- 10. まとめに書くこと ----
-    res.SpecsT = JoinItems(specText)
-    res.SpecsOutside = JoinItems(outSpecs)
+    rsSpecsT = JoinItems(specText)
+    rsSpecsOutside = JoinItems(outSpecs)
     t = ""
     If headExcl.Count > 0 Then
         keys = headExcl.Keys
@@ -564,10 +547,42 @@ Public Sub CompareCore(ByRef bom As Variant, ByRef mtx As Variant, ByRef map As 
             End If
         Next k
     End If
-    res.HeadsExcluded = t
-    res.SkippedN1 = Not hasFilter
-    res.SkippedN3 = Not cmpName
-    res.SkippedN6 = Not cmpQty
+    rsHeadsExcluded = t
+    rsSkippedN1 = Not hasFilter
+    rsSkippedN3 = Not cmpName
+    rsSkippedN6 = Not cmpQty
+
+    ' ---- 11. 結果を辞書に入れて返す ----
+    DictSet res, "NFind", rsNFind
+    DictSet res, "NNg", rsNNg
+    DictSet res, "NWarn", rsNWarn
+    DictSet res, "MCells", rsMCells
+    DictSet res, "MOk", rsMOk
+    DictSet res, "MNg", rsMNg
+    DictSet res, "MUnk", rsMUnk
+    DictSet res, "MOut", rsMOut
+    DictSet res, "BRows", rsBRows
+    DictSet res, "BOk", rsBOk
+    DictSet res, "BNg", rsBNg
+    DictSet res, "BUnk", rsBUnk
+    DictSet res, "BOut", rsBOut
+    DictSet res, "BPairsT", rsBPairsT
+    DictSet res, "BPairsOk", rsBPairsOk
+    DictSet res, "BPairsUnk", rsBPairsUnk
+    DictSet res, "MPairsYes", rsMPairsYes
+    DictSet res, "MPairsOk", rsMPairsOk
+    DictSet res, "FN4", rsFN4
+    DictSet res, "FN5", rsFN5
+    DictSet res, "Signature", rsSignature
+    DictSet res, "PartNg", rsPartNg
+    DictSet res, "PartWarn", rsPartWarn
+    DictSet res, "NameNg", rsNameNg
+    DictSet res, "SpecsT", rsSpecsT
+    DictSet res, "SpecsOutside", rsSpecsOutside
+    DictSet res, "HeadsExcluded", rsHeadsExcluded
+    DictSet res, "SkippedN1", rsSkippedN1
+    DictSet res, "SkippedN3", rsSkippedN3
+    DictSet res, "SkippedN6", rsSkippedN6
 End Sub
 
 Private Function JoinItems(ByVal d As Object) As String
@@ -593,18 +608,20 @@ End Function
 '     detail    : 試した所の一覧 (改行区切り)
 ' ============================================================
 Public Sub MutationCheck(ByRef bom As Variant, ByRef mtx As Variant, ByRef map As Variant, ByRef warn As Variant, _
-        ByVal hasFilter As Boolean, ByVal cmpName As Boolean, ByVal cmpQty As Boolean, ByRef baseRes As TResult, _
+        ByVal hasFilter As Boolean, ByVal cmpName As Boolean, ByVal cmpQty As Boolean, ByVal baseRes As Object, _
         ByRef nTried As Long, ByRef nDetected As Long, ByRef detail As String)
     Dim nM As Long, nP As Long, i As Long, k As Long, j As Long
     Dim headOne As Object, headMany As Object, headExcl As Object, cellCount As Object, bomParts As Object
     Dim h As String, pk As String, oldVal As String, newVal As String
     Dim cand() As Long, nCand As Long, nPick As Long, idx As Long
-    Dim res2 As TResult, hit As Boolean, baseSig As String
+    Dim res2 As Object, hit As Boolean, baseSig As String
+    Dim f2 As Variant, b2 As Variant, c2 As Variant
 
     nTried = 0: nDetected = 0: detail = ""
     nM = RowCount(mtx): nP = RowCount(map)
     If nM = 0 Or RowCount(bom) = 0 Then Exit Sub
-    baseSig = baseRes.Signature
+    baseSig = baseRes.Item("Signature")
+    Set res2 = NewDict()
 
     ' 仕様コードが 1 つだけに決まる見出しを集める
     Set headOne = NewDict(): Set headMany = NewDict(): Set headExcl = NewDict()
@@ -664,8 +681,8 @@ Public Sub MutationCheck(ByRef bom As Variant, ByRef mtx As Variant, ByRef map A
         oldVal = ToText(mtx(idx, MC_VAL))
         If oldVal = V_YES Then newVal = V_NO Else newVal = V_YES
         mtx(idx, MC_VAL) = newVal
-        CompareCore bom, mtx, map, warn, hasFilter, cmpName, cmpQty, res2
-        hit = (res2.Signature <> baseSig)
+        CompareCore bom, mtx, map, warn, hasFilter, cmpName, cmpQty, res2, f2, b2, c2
+        hit = (res2.Item("Signature") <> baseSig)
         mtx(idx, MC_VAL) = oldVal
         nTried = nTried + 1
         If hit Then nDetected = nDetected + 1

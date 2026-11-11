@@ -51,7 +51,8 @@ def read(path):
 
 def tool_modules(vba_dir, shim_dir):
     """vba/*.bas を読む。modDict だけ LibreOffice 用に差し替える"""
-    mods = [("clsDict", read(os.path.join(shim_dir, "clsDict.cls")), "class")]
+    mods = [("clsBox", read(os.path.join(shim_dir, "clsBox.cls")), "class"),
+            ("clsDict", read(os.path.join(shim_dir, "clsDict.cls")), "class")]
     for fn in sorted(os.listdir(vba_dir)):
         if not fn.endswith(".bas"):
             continue

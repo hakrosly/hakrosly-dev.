@@ -10,6 +10,9 @@ Private mTest() As Variant    ' (列, 行)
 Private mTestN As Long
 Private mTestPass As Long
 Private mTestCap As Long
+Private mF As Variant          ' 最後の照合の、食い違いの一覧
+Private mB As Variant          ' 同じく、部品表の消し込み
+Private mC As Variant          ' 同じく、マトリックスの消し込み
 
 Private Sub TReset()
     mTestCap = 200
@@ -46,14 +49,14 @@ Public Function TestProgress() As String
     End If
 End Function
 
-Private Function CodeCounts(ByRef res As TResult) As String
+Private Function CodeCounts(ByVal res As Object) As String
     ' 例: "N-1=1 N-2=1 N-3=1 N-4=1 N-5=1" (0 件の記号は書かない)
     Dim codes As Variant, i As Long, j As Long, n As Long, s As String
     codes = CodeList()
     For i = LBound(codes) To UBound(codes)
         n = 0
-        For j = 1 To res.NFind
-            If res.Findings(j, FC_CODE) = codes(i) Then n = n + 1
+        For j = 1 To res.Item("NFind")
+            If mF(j, FC_CODE) = codes(i) Then n = n + 1
         Next j
         If n > 0 Then
             If Len(s) > 0 Then s = s & " "
@@ -82,12 +85,12 @@ End Function
 
 ' 読んで照合するところまでを 1 回で行う (テスト用)
 Private Sub ReadAndCompare(ByVal ws As Worksheet, ByVal lay As Object, ByRef bom As Variant, ByRef map As Variant, _
-        ByVal hasFilter As Boolean, ByVal cmpQty As Boolean, ByRef res As TResult)
+        ByVal hasFilter As Boolean, ByVal cmpQty As Boolean, ByVal res As Object)
     Dim info As Object, mtx As Variant, warn As Variant
     Set info = NewDict()
     mtx = ReadM(ws, lay, info)
     warn = LogRows()
-    CompareCore bom, mtx, map, warn, hasFilter, True, cmpQty, res
+    CompareCore bom, mtx, map, warn, hasFilter, True, cmpQty, res, mF, mB, mC
 End Sub
 
 Private Function NewSheet(ByVal wb As Workbook) As Worksheet
@@ -105,12 +108,13 @@ Public Function RunSelfTest() As String
     Dim wb As Workbook, ws As Worksheet, wsB As Worksheet
     Dim info As Object, lay As Object
     Dim bom As Variant, bomNoFilter As Variant, mtx As Variant, m1 As Variant, warn As Variant, map As Variant
-    Dim res As TResult, baseText As String, n As Long, i As Long
+    Dim res As Object, baseText As String, n As Long, i As Long
     Dim nTried As Long, nDetected As Long, detail As String
-    Dim t As String, summary As String
+    Dim t As String, summary As String, k7 As Boolean, k8 As Boolean, k9 As Boolean
 
     TReset
     TextDefaults
+    Set res = NewDict()
 
     ' ---- 文字のそろえ方 ----
     Chk "T-01", "全角の品番を半角の大文字にそろえる", "AB123-0010", NormPart(ToWide("ab123-0010"))
@@ -153,19 +157,21 @@ Public Function RunSelfTest() As String
     ' M1 の照合
     map = TestMap("")
     warn = LogRows()
-    CompareCore bom, m1, map, warn, True, True, False, res
+    CompareCore bom, m1, map, warn, True, True, False, res, mF, mB, mC
     Chk "T-20", "M1 の照合: 入れておいた 5 つの食い違いが見つかる", "N-1=1 N-2=1 N-3=1 N-4=1 N-5=1", CodeCounts(res)
     Chk "T-20b", "M1 の照合: 消し込みの数 (セル: 一致/不一致/判断できない/対象外、行: 同じ)", "17/3/0/0 9/2/0/1", _
-        res.MOk & "/" & res.MNg & "/" & res.MUnk & "/" & res.MOut & " " & res.BOk & "/" & res.BNg & "/" & res.BUnk & "/" & res.BOut
-    Chk "T-20c", "M1 の照合: 突き合わせの数が合う (K-7, K-8, K-9)", "OK", _
-        IIf(res.BPairsT = res.BPairsOk + res.BPairsUnk + res.FN4 And res.MPairsYes = res.MPairsOk + res.FN5 And res.BPairsOk = res.MPairsOk, "OK", "NG")
+        res.Item("MOk") & "/" & res.Item("MNg") & "/" & res.Item("MUnk") & "/" & res.Item("MOut") & " " & res.Item("BOk") & "/" & res.Item("BNg") & "/" & res.Item("BUnk") & "/" & res.Item("BOut")
+    k7 = (CLng(res.Item("BPairsT")) = CLng(res.Item("BPairsOk")) + CLng(res.Item("BPairsUnk")) + CLng(res.Item("FN4")))
+    k8 = (CLng(res.Item("MPairsYes")) = CLng(res.Item("MPairsOk")) + CLng(res.Item("FN5")))
+    k9 = (CLng(res.Item("BPairsOk")) = CLng(res.Item("MPairsOk")))
+    Chk "T-20c", "M1 の照合: 突き合わせの数が合う (K-7 / K-8 / K-9)", "True/True/True", k7 & "/" & k8 & "/" & k9
     ' 抜き打ち
     MutationCheck bom, m1, map, warn, True, True, False, res, nTried, nDetected, detail
     Chk "T-38", "抜き打ち: 値を逆にした所は、全部気付く", "10/10", nTried & "/" & nDetected
     Chk "T-38b", "抜き打ちのあと、データは元に戻っている", baseText, Content(m1, "")
     ' 絞り込みなし
-    CompareCore bomNoFilter, m1, map, warn, False, True, False, res
-    Chk "T-26", "絞り込みが無いとき: N-1 は調べない", "N-2=1 N-3=1 N-4=1 N-5=1/True", CodeCounts(res) & "/" & res.SkippedN1
+    CompareCore bomNoFilter, m1, map, warn, False, True, False, res, mF, mB, mC
+    Chk "T-26", "絞り込みが無いとき: N-1 は調べない", "N-2=1 N-3=1 N-4=1 N-5=1/True", CodeCounts(res) & "/" & res.Item("SkippedN1")
 
     ' M2: 品番が横
     Set ws = NewSheet(wb)
@@ -188,7 +194,7 @@ Public Function RunSelfTest() As String
     map = TestMap(MAP_EXCLUDE)
     ReadAndCompare ws, TestLayout("M3", ws.Name), bom, map, True, False, res
     Chk "T-22", "M3 の照合 (備考は対象外): M1 と同じ結果。備考の文字は警告にならない", "N-1=1 N-2=1 N-3=1 N-4=1 N-5=1/備考", _
-        CodeCounts(res) & "/" & res.HeadsExcluded
+        CodeCounts(res) & "/" & res.Item("HeadsExcluded")
     ' 読まれていない印に気付くか (品番が空の行に印を置く)
     ws.Range("C8").Value = ChrW(&H25CB)
     Set info = NewDict()
@@ -220,7 +226,7 @@ Public Function RunSelfTest() As String
     Set ws = NewSheet(wb)
     FillTestMatrix ws, "OK"
     ReadAndCompare ws, TestLayout("OK", ws.Name), bom, map, True, False, res
-    Chk "T-27", "食い違いを直したマトリックス: 不一致 0、警告 0", "(なし)/0/0", CodeCounts(res) & "/" & res.NNg & "/" & res.NWarn
+    Chk "T-27", "食い違いを直したマトリックス: 不一致 0、警告 0", "(なし)/0/0", CodeCounts(res) & "/" & res.Item("NNg") & "/" & res.Item("NWarn")
 
     ' ---- 警告 (M1 を 1 か所だけ変える) ----
     Set ws = NewSheet(wb)
@@ -237,7 +243,7 @@ Public Function RunSelfTest() As String
     ws.Range("C5").Value = ChrW(&H25B3)
     ReadAndCompare ws, TestLayout("M1", ws.Name), bom, map, True, False, res
     Chk "T-31", "印の一覧に無い値: 判断できない値 (W-3)。あり にも なし にもしない", "N-1=1 N-2=1 N-3=1 N-4=1 N-5=1 W-3=1/1", _
-        CodeCounts(res) & "/" & res.MUnk
+        CodeCounts(res) & "/" & res.Item("MUnk")
 
     Set ws = NewSheet(wb)
     FillTestMatrix ws, "M1"
@@ -347,7 +353,7 @@ Private Sub EndToEnd()
     ' 対応を書いて照合する
     WriteTestMapToSheet lay.Item("name"), MAP_EXCLUDE
     msg = RunCompare(ws, False, outWb, verdict)
-    Chk "T-50", "通し: 判定", "不一致あり", verdict
+    Chk "T-50", "通し: 判定と、検算で合わなかった項目", "不一致あり / ", verdict & " / " & ProofBadList()
     Chk "T-52", "通し: 結果のブックのシートの数", "8", CStr(outWb.Worksheets.Count)
     Chk "T-53", "通し: 写しの色 (一致 = 緑 / 印が無い = 赤 / 印が余分 = 赤 / 部品表に無い品番 = 赤 / 名称が違う = 赤 / 備考 = 灰 / 見出し = 水色)", _
         COL_OK & "/" & COL_NG & "/" & COL_NG & "/" & COL_NG & "/" & COL_NG & "/" & COL_OUT & "/" & COL_HEAD, _

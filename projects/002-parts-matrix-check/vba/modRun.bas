@@ -86,7 +86,8 @@ Public Function RunCompare(ByVal srcWs As Worksheet, ByVal doSave As Boolean, By
     Dim bom As Variant, mtx As Variant, warn As Variant, map As Variant
     Dim layName As String, lay As Object, un As String
     Dim hasFilter As Boolean, cmpName As Boolean, cmpQty As Boolean
-    Dim res As TResult, nTried As Long, nDetected As Long, detail As String, saved As String, t As String
+    Dim findings As Variant, bomCheck As Variant, cellCheck As Variant
+    Dim res As Object, nTried As Long, nDetected As Long, detail As String, saved As String, t As String
 
     TextLoad
     bom = ReadTable(ToolSheet(SH_RD_BOM), BC_N)
@@ -109,13 +110,18 @@ Public Function RunCompare(ByVal srcWs As Worksheet, ByVal doSave As Boolean, By
     hasFilter = (StateGet("bom.hasFilter") = "1")
     cmpName = (StateGet("bom.hasName") = "1" And StateGet("mtx.hasName") = "1")
     cmpQty = (StateGet("bom.hasQty") = "1" And StateGet("mtx.asQty") = "1")
-    CompareCore bom, mtx, map, warn, hasFilter, cmpName, cmpQty, res
+    Set res = NewDict()
+    CompareCore bom, mtx, map, warn, hasFilter, cmpName, cmpQty, res, findings, bomCheck, cellCheck
     MutationCheck bom, mtx, map, warn, hasFilter, cmpName, cmpQty, res, nTried, nDetected, detail
-    Set outWb = BuildResultBook(res, bom, mtx, map, lay, srcWs, nTried, nDetected, detail, verdict)
+    Set outWb = BuildResultBook(res, findings, bomCheck, cellCheck, bom, mtx, map, lay, srcWs, nTried, nDetected, detail, verdict)
     saved = ""
     If doSave Then saved = SaveResultBook(outWb, layName)
     t = "判定: " & verdict & vbLf & _
-        "不一致: " & res.NNg & " 件 / 警告: " & res.NWarn & " 件" & vbLf
+        "不一致: " & res.Item("NNg") & " 件 / 警告: " & res.Item("NWarn") & " 件" & vbLf
+    If Len(ProofBadList()) > 0 Then
+        t = t & vbLf & "検算で合わなかった項目: " & ProofBadList() & vbLf & _
+            "読み取りの範囲や設定を確かめてください。くわしくは結果のシート「" & R_PROOF & "」にあります。" & vbLf
+    End If
     If Len(saved) > 0 Then t = t & vbLf & "結果を保存しました:" & vbLf & saved
     RunCompare = t
 End Function

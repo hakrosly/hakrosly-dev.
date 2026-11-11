@@ -121,6 +121,7 @@ Private Sub AddButton(ByVal ws As Worksheet, ByVal r As Long, ByVal caption As S
         b.Caption = caption
         b.OnAction = macroName
         b.Name = "btn_" & macroName
+        ws.Cells(r, 2).Value = ""
     Else
         ws.Cells(r, 2).Value = caption & " (マクロ名: " & macroName & ")"
     End If

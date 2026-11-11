@@ -18,6 +18,9 @@ Private mSumCap As Long
 Private mProof() As Variant   ' 検算の行をためる (列, 行)
 Private mProofN As Long
 Private mProofBad As Long     ' 合わなかった項目の数
+Private mFnd As Variant        ' 食い違いの一覧 (modCompare の findings)
+Private mBChk As Variant       ' 部品表の消し込み (bomCheck)
+Private mCChk As Variant       ' マトリックスの消し込み (cellCheck)
 
 Private Sub SumReset()
     mSumCap = 200
@@ -78,11 +81,11 @@ Private Function OneLine(ByVal s As String) As String
     End If
 End Function
 
-Private Function CountCode(ByRef res As TResult, ByVal code As String) As Long
+Private Function CountCode(ByVal res As Object, ByVal code As String) As Long
     Dim i As Long, n As Long
     n = 0
-    For i = 1 To res.NFind
-        If res.Findings(i, FC_CODE) = code Then n = n + 1
+    For i = 1 To res.Item("NFind")
+        If mFnd(i, FC_CODE) = code Then n = n + 1
     Next i
     CountCode = n
 End Function
@@ -121,18 +124,51 @@ Private Sub PaintAddr(ByVal ws As Worksheet, ByVal addr As String, ByVal color A
     End If
 End Sub
 
+' 検算で合わなかった項目の記号を並べて返す (全部合えば "")
+Public Function ProofBadList() As String
+    Dim i As Long, s As String
+    For i = 1 To mProofN
+        If mProof(5, i) = "合わない" Then
+            If Len(s) > 0 Then s = s & ", "
+            s = s & mProof(1, i) & " (左 " & mProof(3, i) & " / 右 " & mProof(4, i) & ")"
+        End If
+    Next i
+    ProofBadList = s
+End Function
+
 ' ============================================================
 ' 検算の表を作り、判定を決める
 ' ============================================================
-Private Function MakeProof(ByRef res As TResult, ByVal nTried As Long, ByVal nDetected As Long) As String
+Private Function MakeProof(ByVal res As Object, ByVal nTried As Long, ByVal nDetected As Long) As String
     Dim t As String, now1 As String
+    ' 数は先に取り出しておく (1 つの式の中で辞書を何度も引かない)
+    Dim nBNg As Long, nBOk As Long, nBOut As Long, nBPairsOk As Long, nBPairsT As Long, nBPairsUnk As Long, nBRows As Long, nBUnk As Long, nFN4 As Long, nFN5 As Long, nMCells As Long, nMNg As Long, nMOk As Long, nMOut As Long, nMPairsOk As Long, nMPairsYes As Long, nMUnk As Long, nNNg As Long, nNWarn As Long
+    nBNg = CLng(res.Item("BNg"))
+    nBOk = CLng(res.Item("BOk"))
+    nBOut = CLng(res.Item("BOut"))
+    nBPairsOk = CLng(res.Item("BPairsOk"))
+    nBPairsT = CLng(res.Item("BPairsT"))
+    nBPairsUnk = CLng(res.Item("BPairsUnk"))
+    nBRows = CLng(res.Item("BRows"))
+    nBUnk = CLng(res.Item("BUnk"))
+    nFN4 = CLng(res.Item("FN4"))
+    nFN5 = CLng(res.Item("FN5"))
+    nMCells = CLng(res.Item("MCells"))
+    nMNg = CLng(res.Item("MNg"))
+    nMOk = CLng(res.Item("MOk"))
+    nMOut = CLng(res.Item("MOut"))
+    nMPairsOk = CLng(res.Item("MPairsOk"))
+    nMPairsYes = CLng(res.Item("MPairsYes"))
+    nMUnk = CLng(res.Item("MUnk"))
+    nNNg = CLng(res.Item("NNg"))
+    nNWarn = CLng(res.Item("NWarn"))
     ProofReset
     ' ---- マトリックス ----
     ProofAdd "K-1", "マトリックス: 品番の数 × 仕様の列の数 = 読んだ値のセルの数", _
-        CStr(CLng(StateNum("mtx.parts")) * CLng(StateNum("mtx.cols"))), CStr(res.MCells), _
+        CStr(CLng(StateNum("mtx.parts")) * CLng(StateNum("mtx.cols"))), CStr(nMCells), _
         "読んだ品番 " & StateGet("mtx.parts") & " 件 × 仕様の列 " & StateGet("mtx.cols") & " 列"
     ProofAdd "K-2", "マトリックス: 読んだ値のセルの数 = 一致 + 不一致 + 判断できない + 対象外", _
-        CStr(res.MCells), CStr(res.MOk + res.MNg + res.MUnk + res.MOut), _
+        CStr(nMCells), CStr(nMOk + nMNg + nMUnk + nMOut), _
         "状態の付いていないセルが無いことの確かめ"
     t = "品番の範囲 × 見出しの範囲 を端から数えた「あり」の印のセルの数と、読み取りで使った「あり」のセルの数"
     If CLng(StateNum("mtx.unreadCount")) > 0 Then t = t & "。読まれていない印: " & StateGet("mtx.unread")
@@ -149,15 +185,15 @@ Private Function MakeProof(ByRef res As TResult, ByVal nTried As Long, ByVal nDe
     ProofAdd "K-5", "部品表: データの行数 = 読んだ行 + 空で飛ばした行 + エラーで読まなかった行", _
         StateGet("bom.dataRows"), CStr(CLng(StateNum("bom.readRows")) + CLng(StateNum("bom.blankRows")) + CLng(StateNum("bom.errRows"))), ""
     ProofAdd "K-6", "部品表: 共通の形に直した行数 = 一致 + 不一致 + 判断できない + 対象外", _
-        CStr(res.BRows), CStr(res.BOk + res.BNg + res.BUnk + res.BOut), "状態の付いていない行が無いことの確かめ"
+        CStr(nBRows), CStr(nBOk + nBNg + nBUnk + nBOut), "状態の付いていない行が無いことの確かめ"
     ' ---- 両方の突き合わせ ----
     ProofAdd "K-7", "突き合わせ: 部品表の「品番 × 仕様」の組 = 一致の組 + 判断できない組 + N-4 の件数", _
-        CStr(res.BPairsT), CStr(res.BPairsOk + res.BPairsUnk + res.FN4), _
+        CStr(nBPairsT), CStr(nBPairsOk + nBPairsUnk + nFN4), _
         "左は部品表の側から、N-4 はマトリックスの側から数えた数"
     ProofAdd "K-8", "突き合わせ: マトリックスの「あり」の組 = 一致の組 + N-5 の件数", _
-        CStr(res.MPairsYes), CStr(res.MPairsOk + res.FN5), "品番が部品表にあるものだけを数える"
+        CStr(nMPairsYes), CStr(nMPairsOk + nFN5), "品番が部品表にあるものだけを数える"
     ProofAdd "K-9", "突き合わせ: 一致の組を、部品表の側から数えた数 = マトリックスの側から数えた数", _
-        CStr(res.BPairsOk), CStr(res.MPairsOk), ""
+        CStr(nBPairsOk), CStr(nMPairsOk), ""
     ' ---- 抜き打ち ----
     If nTried = 0 Then
         ProofSkip "K-10", "抜き打ち: わざと値を逆にした数 = 照合が気付いた数", "試せるセルが無かった"
@@ -187,9 +223,9 @@ Private Function MakeProof(ByRef res As TResult, ByVal nTried As Long, ByVal nDe
     ' ---- 判定 ----
     If mProofBad > 0 Then
         MakeProof = "検算が合わない (この結果は使わないこと)"
-    ElseIf res.NNg > 0 Then
+    ElseIf nNNg > 0 Then
         MakeProof = "不一致あり"
-    ElseIf res.NWarn > 0 Then
+    ElseIf nNWarn > 0 Then
         MakeProof = "一致 (警告あり)"
     Else
         MakeProof = "一致"
@@ -198,14 +234,19 @@ End Function
 
 ' ============================================================
 ' 結果のブックを作る。作ったブックを返す (保存はしない。保存は SaveResultBook)
+'   res / findings / bomCheck / cellCheck : modCompare.CompareCore の結果
 '   srcWs : マトリックスの元のシート。Nothing なら写しは作らない
 ' ============================================================
-Public Function BuildResultBook(ByRef res As TResult, ByRef bom As Variant, ByRef mtx As Variant, ByRef map As Variant, _
+Public Function BuildResultBook(ByVal res As Object, ByRef findings As Variant, ByRef bomCheck As Variant, ByRef cellCheck As Variant, _
+        ByRef bom As Variant, ByRef mtx As Variant, ByRef map As Variant, _
         ByVal lay As Object, ByVal srcWs As Worksheet, ByVal nTried As Long, ByVal nDetected As Long, _
         ByVal mutDetail As String, ByRef verdict As String) As Workbook
     Dim wb As Workbook, ws As Worksheet, wsM As Worksheet
     Dim i As Long, paintNote As String, hasCopy As Boolean
 
+    mFnd = findings
+    mBChk = bomCheck
+    mCChk = cellCheck
     verdict = MakeProof(res, nTried, nDetected)
 
     Set wb = Workbooks.Add
@@ -291,7 +332,7 @@ End Function
 ' ---- 写しに色を付ける (赤ペンの代わり)。できたら True ----
 '   読んだ見出し = 水色、対象外 = 灰、一致 = 緑、判断できない = 黄、不一致 = 赤
 '   色の付いていないセルは、ツールが見ていないセル
-Private Function PaintMatrix(ByVal ws As Worksheet, ByRef mtx As Variant, ByRef res As TResult) As Boolean
+Private Function PaintMatrix(ByVal ws As Worksheet, ByRef mtx As Variant, ByVal res As Object) As Boolean
     Dim nM As Long, i As Long, pass As Long, st As String, want As String
     Dim seen As Object, addr As String, key As String, excl As Object, heads As Variant, k As Long
     PaintMatrix = False
@@ -302,8 +343,8 @@ Private Function PaintMatrix(ByVal ws As Worksheet, ByRef mtx As Variant, ByRef 
     End If
     On Error GoTo Fail
     Set excl = NewDict()
-    If Len(res.HeadsExcluded) > 0 Then
-        heads = Split(res.HeadsExcluded, vbLf)
+    If Len(res.Item("HeadsExcluded")) > 0 Then
+        heads = Split(res.Item("HeadsExcluded"), vbLf)
         For k = LBound(heads) To UBound(heads)
             If Not excl.Exists(heads(k)) Then excl.Add heads(k), True
         Next k
@@ -330,7 +371,7 @@ Private Function PaintMatrix(ByVal ws As Worksheet, ByRef mtx As Variant, ByRef 
             Case Else: want = S_NG
         End Select
         For i = 1 To nM
-            st = res.CellStatus(i)
+            st = mCChk(i, 1)
             If st = want Then PaintAddr ws, ToText(mtx(i, MC_VALCELL)), StatusColor(st)
         Next i
     Next pass
@@ -341,17 +382,17 @@ Private Function PaintMatrix(ByVal ws As Worksheet, ByRef mtx As Variant, ByRef 
         key = ToText(mtx(i, MC_KEY))
         If Not seen.Exists(addr & vbTab & key) Then
             seen.Add addr & vbTab & key, True
-            If InStr(res.PartNg, vbTab & key & vbTab) > 0 Then
+            If InStr(res.Item("PartNg"), vbTab & key & vbTab) > 0 Then
                 PaintAddr ws, addr, COL_NG
-            ElseIf InStr(res.PartWarn, vbTab & key & vbTab) > 0 Then
+            ElseIf InStr(res.Item("PartWarn"), vbTab & key & vbTab) > 0 Then
                 PaintAddr ws, addr, COL_UNK
             Else
                 PaintAddr ws, addr, COL_OK
             End If
-            If Len(ToText(mtx(i, MC_NAMECELL))) > 0 And Not res.SkippedN3 Then
-                If InStr(res.NameNg, vbTab & key & vbTab) > 0 Then
+            If Len(ToText(mtx(i, MC_NAMECELL))) > 0 And Not res.Item("SkippedN3") Then
+                If InStr(res.Item("NameNg"), vbTab & key & vbTab) > 0 Then
                     PaintAddr ws, ToText(mtx(i, MC_NAMECELL)), COL_NG
-                ElseIf InStr(res.PartNg, vbTab & key & vbTab) > 0 Then
+                ElseIf InStr(res.Item("PartNg"), vbTab & key & vbTab) > 0 Then
                     PaintAddr ws, ToText(mtx(i, MC_NAMECELL)), COL_OUT
                 Else
                     PaintAddr ws, ToText(mtx(i, MC_NAMECELL)), COL_OK
@@ -373,41 +414,41 @@ Private Sub LinkToCopy(ByVal c As Range, ByVal addr As String)
 End Sub
 
 ' ---- 食い違い一覧 ----
-Private Sub WriteFindings(ByVal ws As Worksheet, ByRef res As TResult, ByVal hasCopy As Boolean)
+Private Sub WriteFindings(ByVal ws As Worksheet, ByVal res As Object, ByVal hasCopy As Boolean)
     Dim out() As Variant, i As Long, j As Long
     WriteHeader ws, Array("No", "区分", "記号", "名前", "品番", "名称 (部品表)", "名称 (マトリックス)", "仕様コード", _
         "見出しの文字", "部品表の値", "マトリックスの値", "マトリックスのセル", "説明")
-    If res.NFind = 0 Then
+    If res.Item("NFind") = 0 Then
         ws.Cells(2, 1).Value = "食い違いも警告もありません。"
         Exit Sub
     End If
-    ReDim out(1 To res.NFind, 1 To FC_N + 1)
-    For i = 1 To res.NFind
+    ReDim out(1 To res.Item("NFind"), 1 To FC_N + 1)
+    For i = 1 To res.Item("NFind")
         out(i, 1) = i
         For j = 1 To FC_N
-            out(i, j + 1) = res.Findings(i, j)
+            out(i, j + 1) = mFnd(i, j)
         Next j
     Next i
-    With ws.Range(ws.Cells(2, 1), ws.Cells(res.NFind + 1, FC_N + 1))
+    With ws.Range(ws.Cells(2, 1), ws.Cells(res.Item("NFind") + 1, FC_N + 1))
         .NumberFormat = "@"
         .Value = out
     End With
-    For i = 1 To res.NFind
-        If res.Findings(i, FC_CLASS) = CLASS_NG Then
+    For i = 1 To res.Item("NFind")
+        If mFnd(i, FC_CLASS) = CLASS_NG Then
             ws.Range(ws.Cells(i + 1, 1), ws.Cells(i + 1, 4)).Interior.Color = COL_NG
         Else
             ws.Range(ws.Cells(i + 1, 1), ws.Cells(i + 1, 4)).Interior.Color = COL_UNK
         End If
-        If hasCopy Then LinkToCopy ws.Cells(i + 1, FC_CELL + 1), CStr(res.Findings(i, FC_CELL))
+        If hasCopy Then LinkToCopy ws.Cells(i + 1, FC_CELL + 1), CStr(mFnd(i, FC_CELL))
     Next i
     On Error Resume Next
-    ws.Range(ws.Cells(1, 1), ws.Cells(res.NFind + 1, FC_N + 1)).AutoFilter
+    ws.Range(ws.Cells(1, 1), ws.Cells(res.Item("NFind") + 1, FC_N + 1)).AutoFilter
     ws.Columns("A:M").AutoFit
     On Error GoTo 0
 End Sub
 
 ' ---- マトリックスのセルごとの結果 ----
-Private Sub WriteCells(ByVal ws As Worksheet, ByRef mtx As Variant, ByRef res As TResult, ByVal hasCopy As Boolean)
+Private Sub WriteCells(ByVal ws As Worksheet, ByRef mtx As Variant, ByVal res As Object, ByVal hasCopy As Boolean)
     Dim out() As Variant, n As Long, i As Long, a As Long, st As String
     WriteHeader ws, Array("No", "品番", "名称", "見出しの文字", "ツールの読み", "員数", "セルに入っていた文字", _
         "品番のセル", "値のセル", "状態", "説明")
@@ -424,14 +465,14 @@ Private Sub WriteCells(ByVal ws As Worksheet, ByRef mtx As Variant, ByRef res As
         out(i, 7) = mtx(i, MC_RAW)
         out(i, 8) = mtx(i, MC_PARTCELL)
         out(i, 9) = mtx(i, MC_VALCELL)
-        out(i, 10) = res.CellStatus(i)
-        out(i, 11) = res.CellNote(i)
+        out(i, 10) = mCChk(i, 1)
+        out(i, 11) = mCChk(i, 2)
     Next i
     With ws.Range(ws.Cells(2, 1), ws.Cells(n + 1, 11))
         .NumberFormat = "@"
         .Value = out
     End With
-    ColorRuns ws, 10, n, res.CellStatus
+    ColorRuns ws, 10, n, mCChk
     On Error Resume Next
     ws.Range(ws.Cells(1, 1), ws.Cells(n + 1, 11)).AutoFilter
     ws.Columns("A:K").AutoFit
@@ -439,7 +480,7 @@ Private Sub WriteCells(ByVal ws As Worksheet, ByRef mtx As Variant, ByRef res As
 End Sub
 
 ' ---- 部品表の消し込み (全部の行に状態を付ける) ----
-Private Sub WriteBomCheck(ByVal ws As Worksheet, ByRef bom As Variant, ByRef res As TResult)
+Private Sub WriteBomCheck(ByVal ws As Worksheet, ByRef bom As Variant, ByVal res As Object)
     Dim out() As Variant, n As Long, i As Long
     WriteHeader ws, Array("部品表の行", "品番", "名称", "仕様コード", "員数", "範囲の中", "状態", "説明")
     n = RowCount(bom)
@@ -452,14 +493,14 @@ Private Sub WriteBomCheck(ByVal ws As Worksheet, ByRef bom As Variant, ByRef res
         out(i, 4) = bom(i, BC_SPEC)
         out(i, 5) = bom(i, BC_QTY)
         out(i, 6) = bom(i, BC_INSCOPE)
-        out(i, 7) = res.BomStatus(i)
-        out(i, 8) = res.BomNote(i)
+        out(i, 7) = mBChk(i, 1)
+        out(i, 8) = mBChk(i, 2)
     Next i
     With ws.Range(ws.Cells(2, 1), ws.Cells(n + 1, 8))
         .NumberFormat = "@"
         .Value = out
     End With
-    ColorRuns ws, 7, n, res.BomStatus
+    ColorRuns ws, 7, n, mBChk
     On Error Resume Next
     ws.Range(ws.Cells(1, 1), ws.Cells(n + 1, 8)).AutoFilter
     ws.Columns("A:H").AutoFit
@@ -467,14 +508,15 @@ Private Sub WriteBomCheck(ByVal ws As Worksheet, ByRef bom As Variant, ByRef res
 End Sub
 
 ' 状態の列に色を付ける。同じ状態が続く所は、まとめて 1 回で塗る
-Private Sub ColorRuns(ByVal ws As Worksheet, ByVal col As Long, ByVal n As Long, ByRef statuses As Variant)
+'   chk : 消し込みの配列 (行, 2)。1 列目が状態
+Private Sub ColorRuns(ByVal ws As Worksheet, ByVal col As Long, ByVal n As Long, ByRef chk As Variant)
     Dim i As Long, a As Long
     a = 1
     For i = 2 To n + 1
         If i > n Then
-            ws.Range(ws.Cells(a + 1, col), ws.Cells(n + 1, col)).Interior.Color = StatusColor(statuses(a))
-        ElseIf statuses(i) <> statuses(a) Then
-            ws.Range(ws.Cells(a + 1, col), ws.Cells(i, col)).Interior.Color = StatusColor(statuses(a))
+            ws.Range(ws.Cells(a + 1, col), ws.Cells(n + 1, col)).Interior.Color = StatusColor(CStr(chk(a, 1)))
+        ElseIf chk(i, 1) <> chk(a, 1) Then
+            ws.Range(ws.Cells(a + 1, col), ws.Cells(i, col)).Interior.Color = StatusColor(CStr(chk(a, 1)))
             a = i
         End If
     Next i
@@ -519,7 +561,7 @@ End Sub
 ' ---- 抜き取り確認 (人が目で確かめるための見本) ----
 '   ツールが「一致」としたセルから、「あり」と「なし」を半分ずつ、まんべんなく選ぶ
 Private Sub WriteSample(ByVal ws As Worksheet, ByRef bom As Variant, ByRef mtx As Variant, ByRef map As Variant, _
-        ByRef res As TResult, ByVal hasCopy As Boolean)
+        ByVal res As Object, ByVal hasCopy As Boolean)
     Dim nM As Long, i As Long, j As Long, k As Long, pass As Long, want As String
     Dim cand() As Long, nCand As Long, nPick As Long, idx As Long, r As Long
     Dim headSpecs As Object, bomRows As Object, h As String, specs As Variant, pk As String, rowsTxt As String
@@ -555,7 +597,7 @@ Private Sub WriteSample(ByVal ws As Worksheet, ByRef bom As Variant, ByRef mtx A
         If pass = 1 Then want = V_YES Else want = V_NO
         nCand = 0
         For i = 1 To nM
-            If res.CellStatus(i) = S_OK And ToText(mtx(i, MC_VAL)) = want Then
+            If mCChk(i, 1) = S_OK And ToText(mtx(i, MC_VAL)) = want Then
                 nCand = nCand + 1
                 cand(nCand) = i
             End If
@@ -646,7 +688,7 @@ Private Function CopyTable(ByVal ws As Worksheet, ByVal r As Long, ByVal v As Va
 End Function
 
 ' ---- まとめ ----
-Private Sub WriteSummary(ByVal ws As Worksheet, ByRef res As TResult, ByVal verdict As String, ByVal paintNote As String, _
+Private Sub WriteSummary(ByVal ws As Worksheet, ByVal res As Object, ByVal verdict As String, ByVal paintNote As String, _
         ByVal nTried As Long, ByVal nDetected As Long)
     Dim out As Variant, codes As Variant, i As Long, t As String, r As Long, c As Long, user As String
 
@@ -670,7 +712,7 @@ Private Sub WriteSummary(ByVal ws As Worksheet, ByRef res As TResult, ByVal verd
     SumAdd "読んだ行", StateGet("bom.readRows")
     SumAdd "空で飛ばした行", StateGet("bom.blankRows")
     SumAdd "エラーで読まなかった行", StateGet("bom.errRows")
-    SumAdd "共通の形に直した行数 (品番 × 仕様)", CStr(res.BRows)
+    SumAdd "共通の形に直した行数 (品番 × 仕様)", CStr(res.Item("BRows"))
     SumAdd "", ""
     SumAdd "■ マトリックス", ""
     SumAdd "ファイル", StateGet("mtx.path")
@@ -679,39 +721,39 @@ Private Sub WriteSummary(ByVal ws As Worksheet, ByRef res As TResult, ByVal verd
     SumAdd "読んだときの更新日時と大きさ", StateGet("mtx.stamp")
     SumAdd "読んだ品番の数", StateGet("mtx.parts")
     SumAdd "読んだ仕様の列の数", StateGet("mtx.cols")
-    SumAdd "読んだ値のセルの数", CStr(res.MCells)
+    SumAdd "読んだ値のセルの数", CStr(res.Item("MCells"))
     SumAdd "そのうち「あり」の数", StateGet("mtx.yes")
     SumAdd "品番が空で飛ばした行 (列) の数", StateGet("mtx.blankRows")
     If Len(paintNote) > 0 Then SumAdd "注意", paintNote
     SumAdd "", ""
     SumAdd "■ 比べた範囲", ""
-    SumAdd "対象の仕様", OneLine(res.SpecsT)
-    SumAdd "対象外にした見出し", OneLine(res.HeadsExcluded)
-    SumAdd "比べなかった部品表の仕様", OneLine(res.SpecsOutside)
+    SumAdd "対象の仕様", OneLine(res.Item("SpecsT"))
+    SumAdd "対象外にした見出し", OneLine(res.Item("HeadsExcluded"))
+    SumAdd "比べなかった部品表の仕様", OneLine(res.Item("SpecsOutside"))
     t = ""
-    If res.SkippedN1 Then t = t & "N-1 (部品表の絞り込みが未設定のため、マトリックスの書きもれは調べていない) "
-    If res.SkippedN3 Then t = t & "N-3 (名称の範囲か名称の列が未設定のため、名称は比べていない) "
-    If res.SkippedN6 Then t = t & "N-6 (値の種類が印、または員数の列が未設定のため、員数は比べていない)"
+    If res.Item("SkippedN1") Then t = t & "N-1 (部品表の絞り込みが未設定のため、マトリックスの書きもれは調べていない) "
+    If res.Item("SkippedN3") Then t = t & "N-3 (名称の範囲か名称の列が未設定のため、名称は比べていない) "
+    If res.Item("SkippedN6") Then t = t & "N-6 (値の種類が印、または員数の列が未設定のため、員数は比べていない)"
     If Len(t) = 0 Then t = "(なし)"
     SumAdd "調べなかった項目", t
     SumAdd "", ""
     SumAdd "■ 件数", ""
-    SumAdd "不一致の合計", CStr(res.NNg)
-    SumAdd "警告の合計", CStr(res.NWarn)
+    SumAdd "不一致の合計", CStr(res.Item("NNg"))
+    SumAdd "警告の合計", CStr(res.Item("NWarn"))
     codes = CodeList()
     For i = LBound(codes) To UBound(codes)
         SumAdd codes(i) & " " & CodeTitle(codes(i)), CStr(CountCode(res, codes(i)))
     Next i
     SumAdd "", ""
     SumAdd "■ 消し込み (全部に状態が付いているか)", ""
-    SumAdd "マトリックスのセル: 一致", CStr(res.MOk)
-    SumAdd "マトリックスのセル: 不一致", CStr(res.MNg)
-    SumAdd "マトリックスのセル: 判断できない", CStr(res.MUnk)
-    SumAdd "マトリックスのセル: 対象外", CStr(res.MOut)
-    SumAdd "部品表の行: 一致", CStr(res.BOk)
-    SumAdd "部品表の行: 不一致", CStr(res.BNg)
-    SumAdd "部品表の行: 判断できない", CStr(res.BUnk)
-    SumAdd "部品表の行: 対象外", CStr(res.BOut)
+    SumAdd "マトリックスのセル: 一致", CStr(res.Item("MOk"))
+    SumAdd "マトリックスのセル: 不一致", CStr(res.Item("MNg"))
+    SumAdd "マトリックスのセル: 判断できない", CStr(res.Item("MUnk"))
+    SumAdd "マトリックスのセル: 対象外", CStr(res.Item("MOut"))
+    SumAdd "部品表の行: 一致", CStr(res.Item("BOk"))
+    SumAdd "部品表の行: 不一致", CStr(res.Item("BNg"))
+    SumAdd "部品表の行: 判断できない", CStr(res.Item("BUnk"))
+    SumAdd "部品表の行: 対象外", CStr(res.Item("BOut"))
     SumAdd "", ""
     SumAdd "■ 検算", ""
     If mProofBad = 0 Then

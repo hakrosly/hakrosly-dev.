@@ -1,14 +1,17 @@
 Option Explicit
 ' LibreOffice で試すときだけ使う、辞書の代わり (Excel では使わない)。
 ' Linux には Scripting.Dictionary が無いため。
+' 値は 1 つずつ箱 (clsBox) に入れて持つ (LibreOffice では、配列の中に配列をじかに入れると壊れることがあるため)。
 Private mK() As String
-Private mV() As Variant
+Private mV() As Object
 Private mN As Long
+Private mCap As Long
 
 Private Sub Class_Initialize()
     mN = 0
-    ReDim mK(0 To 15)
-    ReDim mV(0 To 15)
+    mCap = 16
+    ReDim mK(0 To mCap - 1)
+    ReDim mV(0 To mCap - 1)
 End Sub
 
 Private Function Find(ByVal k As String) As Long
@@ -27,26 +30,30 @@ Public Function Exists(ByVal k As String) As Boolean
 End Function
 
 Public Sub Add(ByVal k As String, ByVal v As Variant)
-    If mN > UBound(mK) Then
-        ReDim Preserve mK(0 To mN * 2)
-        ReDim Preserve mV(0 To mN * 2)
+    If mN >= mCap Then
+        mCap = mCap * 2
+        ReDim Preserve mK(0 To mCap - 1)
+        ReDim Preserve mV(0 To mCap - 1)
     End If
+    Dim b As clsBox
+    Set b = New clsBox
+    b.V = v
     mK(mN) = k
-    mV(mN) = v
+    Set mV(mN) = b
     mN = mN + 1
 End Sub
 
 Public Property Get Item(ByVal k As String) As Variant
     Dim i As Long
     i = Find(k)
-    If i >= 0 Then Item = mV(i)
+    If i >= 0 Then Item = mV(i).V
 End Property
 
 Public Sub SetItem(ByVal k As String, ByVal v As Variant)
     Dim i As Long
     i = Find(k)
     If i >= 0 Then
-        mV(i) = v
+        mV(i).V = v
     Else
         Add k, v
     End If
