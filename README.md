@@ -7,6 +7,7 @@
 | 番号 | 名前 | 状態 | 構想書 (Copilot に渡す URL) | 試作 |
 |---|---|---|---|---|
 | 001 | TIFF 図面の構成表読み取りツール | 仕様確定待ち (残課題あり) | [spec.md](projects/001-tiff-table-ocr/spec.md) / [raw](https://raw.githubusercontent.com/hakrosly/hakrosly-dev./ccr-77995653-gzbrvc/projects/001-tiff-table-ocr/spec.md) | あり (古い版) |
+| 002 | 部品表と品番マトリックスの照合ツール | 構想中 | [spec.md](projects/002-parts-matrix-check/spec.md) / [raw](https://raw.githubusercontent.com/hakrosly/hakrosly-dev./ccr-77995653-gzbrvc/projects/002-parts-matrix-check/spec.md) | なし |
 
 状態の種類: 構想中 / 仕様確定待ち / 仕様確定 / 社内で開発中 / 完了 / 中止
 
@@ -35,6 +36,8 @@ projects/
     spec.md                構想書 (Copilot に渡すのはこれだけ)
     decisions.md           決まったこと・未決のことの記録
     prototype/             試作 (ある場合だけ)
+  002-parts-matrix-check/
+    README.md / spec.md / decisions.md
 ```
 
 ## 新しい構想の追加手順
