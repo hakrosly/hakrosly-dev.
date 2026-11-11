@@ -11,3 +11,6 @@ debug/
 *.xlsx
 *.csv
 *.tsv
+
+# 002 の開発用の作業フォルダ
+projects/002-parts-matrix-check/devtools/work/
