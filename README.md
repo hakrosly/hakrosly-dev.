@@ -8,6 +8,7 @@
 |---|---|---|---|---|
 | 001 | TIFF 図面の構成表読み取りツール | 仕様確定待ち (残課題あり) | [spec.md](projects/001-tiff-table-ocr/spec.md) / [raw](https://raw.githubusercontent.com/hakrosly/hakrosly-dev./ccr-77995653-gzbrvc/projects/001-tiff-table-ocr/spec.md) | あり (古い版) |
 | 002 | 部品表と品番マトリックスの照合ツール | 構想中 (土台のコードあり。Excel では未確認) | [spec.md](projects/002-parts-matrix-check/spec.md) / [raw](https://raw.githubusercontent.com/hakrosly/hakrosly-dev./ccr-77995653-gzbrvc/projects/002-parts-matrix-check/spec.md) | [土台のコードと持ち込み用のブック](projects/002-parts-matrix-check/README.md) |
+| 003 | Excel の期限一覧から Teams への期限通知 | 構想中 (仕様の確認待ち。未実装) | 構想書はまだ無い。[実装手順書](projects/003-deadline-teams-notify/実装手順書.md) / [仕様確認資料 (PowerPoint)](projects/003-deadline-teams-notify/仕様確認資料.pptx) | なし |
 
 状態の種類: 構想中 / 仕様確定待ち / 仕様確定 / 社内で開発中 / 完了 / 中止
 
@@ -43,6 +44,9 @@ projects/
     vba/                   VBA のコード (読む用)
     vba_import/            VBA のコード (VBA の画面に取り込む用)
     devtools/              作る側の確かめ用の道具
+  003-deadline-teams-notify/
+    実装手順書.md          Power Automate での作り方 (自分用)
+    仕様確認資料.pptx      仕様を人に確認してもらうための資料
 ```
 
 ## 新しい構想の追加手順
